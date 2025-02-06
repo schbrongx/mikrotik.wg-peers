@@ -311,12 +311,14 @@ class WireguardManagerApp(tk.Tk):
         self.router_connection = None
         self.template_manager = TemplateManager()
         self.create_widgets()
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
         self.connect_to_router()
 
     def create_widgets(self):
         # Listbox zur Anzeige der Peers
         self.peer_listbox = tk.Listbox(self, width=80)
-        self.peer_listbox.grid(row=0, column=0, columnspan=4, padx=5, pady=5)
+        self.peer_listbox.grid(row=0, column=0, columnspan=4, padx=5, pady=5, sticky="nsew")
 
         # Aktions-Buttons
         refresh_button = tk.Button(self, text="Aktualisieren", command=self.refresh_peers)
