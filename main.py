@@ -65,8 +65,7 @@ class RouterConnection:
                 username=self.username,
                 password=self.password,
                 port=self.port,
-                plaintext_login=True,
-                logger=logger  # Logger übergeben, damit die Bibliothek debug-Meldungen ausgibt
+                plaintext_login=True
             )
             self.api = pool.get_api()
             logging.debug("Verbindung erfolgreich hergestellt.")
@@ -201,13 +200,12 @@ class PeerEditor(tk.Toplevel):
     def save(self):
         config = {}
         for key in self.entries:
-            # Falls der Entry-Wert None ist, verwenden wir den leeren String
             value = self.entries[key].get()
             config[key] = value if value is not None else ""
         try:
-            # Prüfen Sie, ob self.peer existiert und ob self.peer.get(".id") einen truthy (gültigen) Wert liefert.
-            if self.peer and self.peer.get(".id"):
-                peer_id = self.peer.get(".id")
+            # Verwenden Sie "id" statt ".id"
+            if self.peer and self.peer.get("id"):
+                peer_id = self.peer.get("id")
                 self.router_connection.update_peer(peer_id, config)
             else:
                 self.router_connection.add_peer(config)
@@ -216,6 +214,7 @@ class PeerEditor(tk.Toplevel):
             self.destroy()
         except Exception as e:
             messagebox.showerror("Fehler", str(e))
+
 
 # -------------------------------
 # UI zur Verwaltung von Vorlagen
@@ -408,7 +407,8 @@ class WireguardManagerApp(tk.Tk):
                 self.tree.delete(item)
             self.peers_data = {}
             for idx, peer in enumerate(peers):
-                real_id = peer.get(".id")
+                # Verwenden Sie "id" statt ".id"
+                real_id = peer.get("id")
                 tree_id = real_id or f"peer_{idx}"
                 displayed_id = real_id if real_id else ""
                 row_values = (
