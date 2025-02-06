@@ -9,6 +9,38 @@ import os
 import routeros_api
 
 # -------------------------------
+# ConfigManager: Speichert und lädt Konfigurationsdaten (z. B. Login und Fenstergeometrie)
+# -------------------------------
+class ConfigManager:
+    def __init__(self, filename="config.json"):
+        self.filename = filename
+        self.config = {}
+        self.load()
+        
+    def load(self):
+        if os.path.exists(self.filename):
+            try:
+                with open(self.filename, "r") as f:
+                    self.config = json.load(f)
+            except Exception as e:
+                self.config = {}
+        else:
+            self.config = {}
+            
+    def save(self):
+        try:
+            with open(self.filename, "w") as f:
+                json.dump(self.config, f, indent=4)
+        except Exception as e:
+            print("Fehler beim Speichern der Konfiguration:", e)
+            
+    def get(self, key, default=None):
+        return self.config.get(key, default)
+    
+    def set(self, key, value):
+        self.config[key] = value
+
+# -------------------------------
 # Klasse zur Verwaltung der Router-Verbindung
 # -------------------------------
 class RouterConnection:
@@ -112,7 +144,7 @@ class PeerEditor(tk.Toplevel):
         self.grab_set()  # Modal
 
     def create_widgets(self):
-        # Definierte Felder: public-key, allowed-address, endpoint, persistent-keepalive
+        # Definierte Felder: public-key, allowed-address, endpoint, persistent_keepalive
         self.entries = {}
         fields = [
             ("public_key", "Public Key"),
@@ -142,7 +174,6 @@ class PeerEditor(tk.Toplevel):
         cancel_button.grid(row=row, column=1, padx=5, pady=5)
 
     def save(self):
-        # Erstellung des Konfigurations-Dictionaries unter Umbenennung der Felder
         config = {
             "public-key": self.entries["public_key"].get(),
             "allowed-address": self.entries["allowed_address"].get(),
@@ -276,6 +307,7 @@ class WireguardManagerApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Wireguard Peer Manager")
+        self.config_manager = ConfigManager()  # ConfigManager initialisieren
         self.router_connection = None
         self.template_manager = TemplateManager()
         self.create_widgets()
@@ -303,12 +335,17 @@ class WireguardManagerApp(tk.Tk):
         template_button.grid(row=2, column=0, columnspan=4, padx=5, pady=5)
 
     def connect_to_router(self):
-        # Abfrage der Verbindungsdaten per Dialog
-        host = simpledialog.askstring("Router Verbindung", "Router IP/Hostname:")
+        # Versuchen, gespeicherte Login-Daten als Standardwerte zu laden
+        login_defaults = self.config_manager.get("login", {})
+        host_default = login_defaults.get("host", "")
+        username_default = login_defaults.get("username", "")
+        port_default = login_defaults.get("port", 8728)
+
+        host = simpledialog.askstring("Router Verbindung", "Router IP/Hostname:", initialvalue=host_default)
         if not host:
             self.quit()
             return
-        username = simpledialog.askstring("Router Verbindung", "Username:")
+        username = simpledialog.askstring("Router Verbindung", "Username:", initialvalue=username_default)
         if not username:
             self.quit()
             return
@@ -316,12 +353,15 @@ class WireguardManagerApp(tk.Tk):
         if not password:
             self.quit()
             return
-        port = simpledialog.askinteger("Router Verbindung", "Port (Standard 8728):", initialvalue=8728)
+        port = simpledialog.askinteger("Router Verbindung", "Port (Standard 8728):", initialvalue=port_default)
 
         self.router_connection = RouterConnection(host, username, password, port)
         try:
             self.router_connection.connect()
             self.refresh_peers()
+            # Speichern der Logindaten (ohne Passwort)
+            self.config_manager.set("login", {"host": host, "username": username, "port": port})
+            self.config_manager.save()
         except Exception as e:
             messagebox.showerror("Verbindungsfehler", str(e))
             self.quit()
@@ -335,7 +375,7 @@ class WireguardManagerApp(tk.Tk):
                 pubkey = peer.get("public-key", "")
                 display_text = f"{peer.get('.id')} - {pubkey[:10] if pubkey else 'Kein Public Key'}"
                 self.peer_listbox.insert(tk.END, display_text)
-            self.peers_data = peers  # Speicherung der vollständigen Daten für spätere Referenz
+            self.peers_data = peers  # Speicherung der vollständigen Daten
         except Exception as e:
             messagebox.showerror("Fehler", str(e))
 
@@ -348,7 +388,6 @@ class WireguardManagerApp(tk.Tk):
         return self.peers_data[index]
 
     def add_peer(self):
-        # Abfrage, ob eine Vorlage verwendet werden soll
         use_template = messagebox.askyesno("Vorlage verwenden?", "Möchten Sie eine Vorlage verwenden?")
         if use_template:
             templates = self.template_manager.get_templates()
@@ -359,7 +398,6 @@ class WireguardManagerApp(tk.Tk):
             template_name = simpledialog.askstring("Vorlage auswählen",
                                                    f"Verfügbare Vorlagen: {', '.join(template_names)}\nGeben Sie den Namen der Vorlage ein:")
             if template_name in templates:
-                # Bei Verwendung einer Vorlage werden die Felder vorab befüllt.
                 PeerEditor(self, self.router_connection, peer=templates[template_name], callback=self.refresh_peers)
             else:
                 messagebox.showwarning("Warnung", "Vorlage nicht gefunden.")
@@ -387,4 +425,3 @@ class WireguardManagerApp(tk.Tk):
 if __name__ == "__main__":
     app = WireguardManagerApp()
     app.mainloop()
-
