@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, ttk
 import json
 import os
 
@@ -144,29 +144,35 @@ class PeerEditor(tk.Toplevel):
         self.grab_set()  # Modal
 
     def create_widgets(self):
-        # Definierte Felder: public-key, allowed-address, endpoint, persistent_keepalive
         self.entries = {}
+        # Neue Feldliste: (Schlüssel, Label)
         fields = [
-            ("public_key", "Public Key"),
-            ("allowed_address", "Allowed Address"),
-            ("endpoint", "Endpoint"),
-            ("persistent_keepalive", "Persistent Keepalive")
+            ("comment", "Comment"),
+            ("name", "Name"),
+            ("interface", "Interface"),
+            ("public-key", "Public Key"),
+            ("private-key", "Private Key"),
+            ("allowed-address", "Allowed Address"),
+            ("client-address", "Client Address"),
+            ("client-dns", "Client DNS"),
+            ("client-endpoint", "Client Endpoint"),
+            ("client-listen-port", "Client Listen Port")
         ]
         row = 0
-        for field_key, field_label in fields:
-            label = tk.Label(self, text=field_label)
+        for key, label_text in fields:
+            label = tk.Label(self, text=label_text)
             label.grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
             entry = tk.Entry(self, width=50)
             entry.grid(row=row, column=1, padx=5, pady=5)
-            self.entries[field_key] = entry
+            self.entries[key] = entry
             row += 1
 
         # Vorbelegung falls ein bestehender Peer editiert wird
         if self.peer:
-            self.entries["public_key"].insert(0, self.peer.get("public-key", ""))
-            self.entries["allowed_address"].insert(0, self.peer.get("allowed-address", ""))
-            self.entries["endpoint"].insert(0, self.peer.get("endpoint", ""))
-            self.entries["persistent_keepalive"].insert(0, self.peer.get("persistent-keepalive", ""))
+            for key, _ in fields:
+                # Es wird versucht, den Wert aus dem bestehenden Peer zu laden
+                entry_value = self.peer.get(key, "")
+                self.entries[key].insert(0, entry_value)
 
         save_button = tk.Button(self, text="Speichern", command=self.save)
         save_button.grid(row=row, column=0, padx=5, pady=5)
@@ -174,14 +180,11 @@ class PeerEditor(tk.Toplevel):
         cancel_button.grid(row=row, column=1, padx=5, pady=5)
 
     def save(self):
-        config = {
-            "public-key": self.entries["public_key"].get(),
-            "allowed-address": self.entries["allowed_address"].get(),
-            "endpoint": self.entries["endpoint"].get(),
-            "persistent-keepalive": self.entries["persistent_keepalive"].get(),
-        }
+        config = {}
+        for key in self.entries:
+            config[key] = self.entries[key].get()
         try:
-            if self.peer:
+            if self.peer:  # Bearbeiten eines existierenden Peers
                 peer_id = self.peer.get(".id")
                 self.router_connection.update_peer(peer_id, config)
             else:
@@ -259,26 +262,30 @@ class TemplateEditor(tk.Toplevel):
     def create_widgets(self):
         self.entries = {}
         fields = [
-            ("public_key", "Public Key"),
-            ("allowed_address", "Allowed Address"),
-            ("endpoint", "Endpoint"),
-            ("persistent_keepalive", "Persistent Keepalive")
+            ("comment", "Comment"),
+            ("name", "Name"),
+            ("interface", "Interface"),
+            ("public-key", "Public Key"),
+            ("private-key", "Private Key"),
+            ("allowed-address", "Allowed Address"),
+            ("client-address", "Client Address"),
+            ("client-dns", "Client DNS"),
+            ("client-endpoint", "Client Endpoint"),
+            ("client-listen-port", "Client Listen Port")
         ]
         row = 0
-        for field_key, field_label in fields:
-            label = tk.Label(self, text=field_label)
+        for key, label_text in fields:
+            label = tk.Label(self, text=label_text)
             label.grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
             entry = tk.Entry(self, width=50)
             entry.grid(row=row, column=1, padx=5, pady=5)
-            self.entries[field_key] = entry
+            self.entries[key] = entry
             row += 1
 
         if not self.new_template:
             config = self.template_manager.get_templates().get(self.template_name, {})
-            self.entries["public_key"].insert(0, config.get("public-key", ""))
-            self.entries["allowed_address"].insert(0, config.get("allowed-address", ""))
-            self.entries["endpoint"].insert(0, config.get("endpoint", ""))
-            self.entries["persistent_keepalive"].insert(0, config.get("persistent-keepalive", ""))
+            for key in self.entries:
+                self.entries[key].insert(0, config.get(key, ""))
 
         save_button = tk.Button(self, text="Speichern", command=self.save)
         save_button.grid(row=row, column=0, padx=5, pady=5)
@@ -286,12 +293,9 @@ class TemplateEditor(tk.Toplevel):
         cancel_button.grid(row=row, column=1, padx=5, pady=5)
 
     def save(self):
-        config = {
-            "public-key": self.entries["public_key"].get(),
-            "allowed-address": self.entries["allowed_address"].get(),
-            "endpoint": self.entries["endpoint"].get(),
-            "persistent-keepalive": self.entries["persistent_keepalive"].get(),
-        }
+        config = {}
+        for key in self.entries:
+            config[key] = self.entries[key].get()
         if self.new_template:
             self.template_manager.add_template(self.template_name, config)
         else:
