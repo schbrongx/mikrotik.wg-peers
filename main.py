@@ -3,6 +3,10 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 import json
 import os
+import logging
+
+# Logging konfigurieren: DEBUG-Level, Format mit Zeitstempel und Level
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
 # Voraussetzung: Installation der routeros_api-Bibliothek
 # pip install routeros_api
@@ -23,6 +27,7 @@ class ConfigManager:
                 with open(self.filename, "r") as f:
                     self.config = json.load(f)
             except Exception as e:
+                logging.error("Fehler beim Laden der Konfiguration: %s", e)
                 self.config = {}
         else:
             self.config = {}
@@ -32,7 +37,7 @@ class ConfigManager:
             with open(self.filename, "w") as f:
                 json.dump(self.config, f, indent=4)
         except Exception as e:
-            print("Fehler beim Speichern der Konfiguration:", e)
+            logging.error("Fehler beim Speichern der Konfiguration: %s", e)
             
     def get(self, key, default=None):
         return self.config.get(key, default)
@@ -53,21 +58,27 @@ class RouterConnection:
 
     def connect(self):
         try:
+            logger = logging.getLogger("routeros_api")
+            logging.debug("Verbindung zu Router '%s' auf Port %s herstellen...", self.host, self.port)
             pool = routeros_api.RouterOsApiPool(
                 self.host,
                 username=self.username,
                 password=self.password,
                 port=self.port,
-                plaintext_login=True
+                plaintext_login=True,
+                logger=logger  # Logger übergeben, damit die Bibliothek debug-Meldungen ausgibt
             )
             self.api = pool.get_api()
+            logging.debug("Verbindung erfolgreich hergestellt.")
         except Exception as e:
             raise Exception("Fehler beim Verbinden: " + str(e))
 
     def get_peers(self):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
+            logging.debug("Sende Befehl: /interface/wireguard/peers/print")
             peers = peers_resource.get()
+            logging.debug("Empfangen: %s", peers)
             return peers
         except Exception as e:
             raise Exception("Fehler beim Abrufen der Peers: " + str(e))
@@ -75,21 +86,27 @@ class RouterConnection:
     def add_peer(self, config):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
+            logging.debug("Sende Befehl zum Hinzufügen eines Peers mit Konfiguration: %s", config)
             peers_resource.add(**config)
+            logging.debug("Peer erfolgreich hinzugefügt.")
         except Exception as e:
             raise Exception("Fehler beim Hinzufügen des Peers: " + str(e))
 
     def update_peer(self, peer_id, config):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
+            logging.debug("Sende Befehl zum Aktualisieren des Peers mit ID '%s' und Konfiguration: %s", peer_id, config)
             peers_resource.set(id=peer_id, **config)
+            logging.debug("Peer mit ID '%s' erfolgreich aktualisiert.", peer_id)
         except Exception as e:
             raise Exception("Fehler beim Aktualisieren des Peers: " + str(e))
 
     def delete_peer(self, peer_id):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
+            logging.debug("Sende Befehl zum Löschen des Peers mit ID '%s'", peer_id)
             peers_resource.remove(id=peer_id)
+            logging.debug("Peer mit ID '%s' erfolgreich gelöscht.", peer_id)
         except Exception as e:
             raise Exception("Fehler beim Löschen des Peers: " + str(e))
 
@@ -145,8 +162,10 @@ class PeerEditor(tk.Toplevel):
 
     def create_widgets(self):
         self.entries = {}
-        # Neue Feldliste: (Schlüssel, Label)
-        fields = [
+        fields = []
+        if self.peer and self.peer.get(".id") is not None:
+            fields.append(("id", "ID"))
+        fields.extend([
             ("comment", "Comment"),
             ("name", "Name"),
             ("interface", "Interface"),
@@ -157,22 +176,22 @@ class PeerEditor(tk.Toplevel):
             ("client-dns", "Client DNS"),
             ("client-endpoint", "Client Endpoint"),
             ("client-listen-port", "Client Listen Port")
-        ]
+        ])
         row = 0
         for key, label_text in fields:
             label = tk.Label(self, text=label_text)
             label.grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
             entry = tk.Entry(self, width=50)
             entry.grid(row=row, column=1, padx=5, pady=5)
+            # Bei "id" setzen wir den Wert und deaktivieren das Feld:
+            if key == "id" and self.peer:
+                entry.insert(0, self.peer.get(".id", ""))
+                entry.configure(state="disabled")
+            else:
+                if self.peer:
+                    entry.insert(0, self.peer.get(key, ""))
             self.entries[key] = entry
             row += 1
-
-        # Vorbelegung falls ein bestehender Peer editiert wird
-        if self.peer:
-            for key, _ in fields:
-                # Es wird versucht, den Wert aus dem bestehenden Peer zu laden
-                entry_value = self.peer.get(key, "")
-                self.entries[key].insert(0, entry_value)
 
         save_button = tk.Button(self, text="Speichern", command=self.save)
         save_button.grid(row=row, column=0, padx=5, pady=5)
@@ -182,9 +201,12 @@ class PeerEditor(tk.Toplevel):
     def save(self):
         config = {}
         for key in self.entries:
-            config[key] = self.entries[key].get()
+            # Falls der Entry-Wert None ist, verwenden wir den leeren String
+            value = self.entries[key].get()
+            config[key] = value if value is not None else ""
         try:
-            if self.peer:  # Bearbeiten eines existierenden Peers
+            # Prüfen Sie, ob self.peer existiert und ob self.peer.get(".id") einen truthy (gültigen) Wert liefert.
+            if self.peer and self.peer.get(".id"):
                 peer_id = self.peer.get(".id")
                 self.router_connection.update_peer(peer_id, config)
             else:
@@ -320,23 +342,30 @@ class WireguardManagerApp(tk.Tk):
         self.connect_to_router()
 
     def create_widgets(self):
-        # Listbox zur Anzeige der Peers
-        self.peer_listbox = tk.Listbox(self, width=80)
-        self.peer_listbox.grid(row=0, column=0, columnspan=4, padx=5, pady=5, sticky="nsew")
-
-        # Aktions-Buttons
+        # Treeview zur Anzeige der Peers mit mehreren Spalten
+        columns = ("id", "comment", "name", "interface", "public-key", "private-key", 
+                   "allowed-address", "client-address", "client-dns", "client-endpoint", "client-listen-port")
+        self.tree = ttk.Treeview(self, columns=columns, show="headings")
+        for col in columns:
+            self.tree.heading(col, text=col.capitalize())
+            self.tree.column(col, width=100, anchor="w")
+        
+        self.tree.grid(row=0, column=0, columnspan=4, padx=5, pady=5, sticky="nsew")
+        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        vsb.grid(row=0, column=4, sticky="ns")
+        self.tree.configure(yscrollcommand=vsb.set)
+        
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
         refresh_button = tk.Button(self, text="Aktualisieren", command=self.refresh_peers)
         refresh_button.grid(row=1, column=0, padx=5, pady=5)
-
         add_button = tk.Button(self, text="Peer hinzufügen", command=self.add_peer)
         add_button.grid(row=1, column=1, padx=5, pady=5)
-
         edit_button = tk.Button(self, text="Peer bearbeiten", command=self.edit_peer)
         edit_button.grid(row=1, column=2, padx=5, pady=5)
-
         delete_button = tk.Button(self, text="Peer löschen", command=self.delete_peer)
         delete_button.grid(row=1, column=3, padx=5, pady=5)
-
         template_button = tk.Button(self, text="Vorlagen verwalten", command=self.manage_templates)
         template_button.grid(row=2, column=0, columnspan=4, padx=5, pady=5)
 
@@ -375,23 +404,30 @@ class WireguardManagerApp(tk.Tk):
     def refresh_peers(self):
         try:
             peers = self.router_connection.get_peers()
-            self.peer_listbox.delete(0, tk.END)
-            for peer in peers:
-                # Anzeige: interne ID und ein Ausschnitt des Public Keys (wenn vorhanden)
-                pubkey = peer.get("public-key", "")
-                display_text = f"{peer.get('.id')} - {pubkey[:10] if pubkey else 'Kein Public Key'}"
-                self.peer_listbox.insert(tk.END, display_text)
-            self.peers_data = peers  # Speicherung der vollständigen Daten
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            self.peers_data = {}
+            for idx, peer in enumerate(peers):
+                real_id = peer.get(".id")
+                tree_id = real_id or f"peer_{idx}"
+                displayed_id = real_id if real_id else ""
+                row_values = (
+                    displayed_id,
+                    peer.get("comment", ""),
+                    peer.get("name", ""),
+                    peer.get("interface", ""),
+                    peer.get("public-key", ""),
+                    peer.get("private-key", ""),
+                    peer.get("allowed-address", ""),
+                    peer.get("client-address", ""),
+                    peer.get("client-dns", ""),
+                    peer.get("client-endpoint", ""),
+                    peer.get("client-listen-port", "")
+                )
+                self.tree.insert("", "end", iid=tree_id, values=row_values)
+                self.peers_data[tree_id] = peer
         except Exception as e:
             messagebox.showerror("Fehler", str(e))
-
-    def get_selected_peer(self):
-        selection = self.peer_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("Warnung", "Bitte wählen Sie einen Peer aus.")
-            return None
-        index = selection[0]
-        return self.peers_data[index]
 
     def add_peer(self):
         use_template = messagebox.askyesno("Vorlage verwenden?", "Möchten Sie eine Vorlage verwenden?")
@@ -409,6 +445,14 @@ class WireguardManagerApp(tk.Tk):
                 messagebox.showwarning("Warnung", "Vorlage nicht gefunden.")
         else:
             PeerEditor(self, self.router_connection, callback=self.refresh_peers)
+
+    def get_selected_peer(self):
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Warnung", "Bitte wählen Sie einen Peer aus.")
+            return None
+        peer_id = selection[0]
+        return self.peers_data.get(peer_id)
 
     def edit_peer(self):
         peer = self.get_selected_peer()
