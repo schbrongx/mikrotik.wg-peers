@@ -62,6 +62,11 @@ class LoginDialog(tk.Toplevel):
         self.title("Login zum Router")
         self.config_manager = config_manager
         self.result = None
+        # BooleanVar für Checkbox "Passwort speichern"
+        self.save_password_var = tk.BooleanVar()
+        # Standardwert aus der Konfiguration (falls vorhanden)
+        login_defaults = self.config_manager.get("login", {})
+        self.save_password_var.set(login_defaults.get("save_password", False))
         self.create_widgets()
         self.grab_set()  # Modal
         self.protocol("WM_DELETE_WINDOW", self.on_cancel)
@@ -71,6 +76,8 @@ class LoginDialog(tk.Toplevel):
         login_defaults = self.config_manager.get("login", {})
         host_default = login_defaults.get("host", "")
         username_default = login_defaults.get("username", "")
+        # Passwort nur übernehmen, wenn das Flag gesetzt ist
+        password_default = login_defaults.get("password", "") if login_defaults.get("save_password") else ""
         port_default = login_defaults.get("port", 8728)
 
         label_host = tk.Label(self, text="Router IP/Hostname:")
@@ -89,6 +96,7 @@ class LoginDialog(tk.Toplevel):
         label_password.grid(row=2, column=0, padx=5, pady=5, sticky="w")
         self.entry_password = tk.Entry(self, width=40, show="*")
         self.entry_password.grid(row=2, column=1, padx=5, pady=5)
+        self.entry_password.insert(0, password_default)
 
         label_port = tk.Label(self, text="Port:")
         label_port.grid(row=3, column=0, padx=5, pady=5, sticky="w")
@@ -96,8 +104,12 @@ class LoginDialog(tk.Toplevel):
         self.entry_port.grid(row=3, column=1, padx=5, pady=5)
         self.entry_port.insert(0, str(port_default))
 
+        # Checkbox: Passwort speichern?
+        self.check_save_password = tk.Checkbutton(self, text="Passwort speichern", variable=self.save_password_var)
+        self.check_save_password.grid(row=4, column=0, columnspan=2, pady=5)
+
         button_frame = tk.Frame(self)
-        button_frame.grid(row=4, column=0, columnspan=2, pady=10)
+        button_frame.grid(row=5, column=0, columnspan=2, pady=10)
         ok_button = tk.Button(button_frame, text="OK", command=self.on_ok)
         ok_button.pack(side="left", padx=5)
         cancel_button = tk.Button(button_frame, text="Abbrechen", command=self.on_cancel)
@@ -115,7 +127,13 @@ class LoginDialog(tk.Toplevel):
         if not host or not username or not password:
             messagebox.showerror("Fehler", "Bitte alle Felder ausfüllen.")
             return
-        self.result = {"host": host, "username": username, "password": password, "port": port}
+        self.result = {
+            "host": host,
+            "username": username,
+            "password": password if self.save_password_var.get() else "",
+            "port": port,
+            "save_password": self.save_password_var.get()
+        }
         self.grab_release()
         self.destroy()
 
@@ -513,8 +531,12 @@ class WireguardManagerApp(tk.Tk):
         try:
             self.router_connection.connect()
             self.refresh_peers()
-            # Speichern der Logindaten (ohne Passwort)
-            self.config_manager.set("login", {"host": host, "username": username, "port": port})
+            # Speichern der Logindaten (inklusive Passwort, wenn gewählt)
+            login_data = {"host": host, "username": username, "port": port}
+            if result.get("save_password"):
+                login_data["password"] = password
+            login_data["save_password"] = result.get("save_password")
+            self.config_manager.set("login", login_data)
             self.config_manager.save()
         except Exception as e:
             messagebox.showerror("Verbindungsfehler", str(e))
@@ -555,7 +577,6 @@ class WireguardManagerApp(tk.Tk):
             if not templates:
                 messagebox.showinfo("Keine Vorlagen", "Keine Vorlagen vorhanden.")
                 return
-            # Öffne den TemplateSelectionDialog zur Auswahl einer Vorlage
             dialog = TemplateSelectionDialog(self, self.template_manager)
             selected_template = dialog.selected_template
             if selected_template:
@@ -590,6 +611,7 @@ class WireguardManagerApp(tk.Tk):
 
     def manage_templates(self):
         TemplateManagerUI(self, self.template_manager)
+
 
 if __name__ == "__main__":
     app = WireguardManagerApp()
