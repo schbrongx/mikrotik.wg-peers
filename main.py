@@ -4,13 +4,24 @@ from tkinter import messagebox, simpledialog, ttk
 import json
 import os
 import logging
+from nacl.public import PrivateKey
+import base64
+import routeros_api
 
-# Logging konfigurieren: DEBUG-Level, Format mit Zeitstempel und Level
+
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
-# Voraussetzung: Installation der routeros_api-Bibliothek
-# pip install routeros_api
-import routeros_api
+
+def generate_keypair():
+    """
+    Erzeugt ein neues Schlüsselpaar (privater und öffentlicher Schlüssel)
+    mithilfe von PyNaCl.
+    """
+    priv = PrivateKey.generate()
+    priv_key = base64.b64encode(priv.encode()).decode('ascii')
+    pub_key = base64.b64encode(priv.public_key.encode()).decode('ascii')
+    return priv_key, pub_key
+
 
 # -------------------------------
 # ConfigManager: Speichert und lädt Konfigurationsdaten (z. B. Login und Fenstergeometrie)
@@ -192,10 +203,30 @@ class PeerEditor(tk.Toplevel):
             self.entries[key] = entry
             row += 1
 
+        keygen_button = tk.Button(self, text="Schlüsselpaar generieren", command=self.generate_keys)
+        keygen_button.grid(row=row, column=0, columnspan=2, padx=5, pady=5)
+        row += 1
+
         save_button = tk.Button(self, text="Speichern", command=self.save)
         save_button.grid(row=row, column=0, padx=5, pady=5)
         cancel_button = tk.Button(self, text="Abbrechen", command=self.destroy)
         cancel_button.grid(row=row, column=1, padx=5, pady=5)
+
+    def generate_keys(self):
+        # Prüfe, ob in den Feldern bereits ein Schlüssel steht
+        current_pub = self.entries["public-key"].get()
+        current_priv = self.entries["private-key"].get()
+        if current_pub or current_priv:
+            overwrite = messagebox.askyesno("Überschreiben?", "Ein Schlüsselpaar existiert bereits. Möchten Sie es überschreiben?")
+            if not overwrite:
+                return
+        # Erzeuge ein neues Schlüsselpaar
+        priv_key, pub_key = generate_keypair()
+        self.entries["public-key"].delete(0, tk.END)
+        self.entries["public-key"].insert(0, pub_key)
+        self.entries["private-key"].delete(0, tk.END)
+        self.entries["private-key"].insert(0, priv_key)
+        logging.debug("Neues Schlüsselpaar generiert: Public Key: %s, Private Key: %s", pub_key, priv_key)
 
     def save(self):
         config = {}
