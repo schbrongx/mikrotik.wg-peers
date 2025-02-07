@@ -158,6 +158,43 @@ class TemplateManager:
         return self.templates
 
 # -------------------------------
+# Dialog zur Auswahl eines Templates
+# -------------------------------
+class TemplateSelectionDialog(tk.Toplevel):
+    def __init__(self, master, template_manager):
+        super().__init__(master)
+        self.template_manager = template_manager
+        self.title("Vorlage auswählen")
+        self.selected_template = None
+        self.create_widgets()
+        self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self.on_cancel)
+        self.wait_window(self)
+
+    def create_widgets(self):
+        self.listbox = tk.Listbox(self, width=50)
+        self.listbox.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        # Füllen Sie die Listbox mit den vorhandenen Vorlagennamen
+        for name in self.template_manager.get_templates().keys():
+            self.listbox.insert(tk.END, name)
+        button_frame = tk.Frame(self)
+        button_frame.pack(padx=10, pady=10)
+        ok_button = tk.Button(button_frame, text="OK", command=self.on_ok)
+        ok_button.pack(side=tk.LEFT, padx=5)
+        cancel_button = tk.Button(button_frame, text="Abbrechen", command=self.on_cancel)
+        cancel_button.pack(side=tk.LEFT, padx=5)
+
+    def on_ok(self):
+        selection = self.listbox.curselection()
+        if selection:
+            self.selected_template = self.listbox.get(selection[0])
+        self.destroy()
+
+    def on_cancel(self):
+        self.selected_template = None
+        self.destroy()
+
+# -------------------------------
 # Dialog zur Bearbeitung/Hinzufügung eines Peers
 # -------------------------------
 class PeerEditor(tk.Toplevel):
@@ -467,13 +504,13 @@ class WireguardManagerApp(tk.Tk):
             if not templates:
                 messagebox.showinfo("Keine Vorlagen", "Keine Vorlagen vorhanden.")
                 return
-            template_names = list(templates.keys())
-            template_name = simpledialog.askstring("Vorlage auswählen",
-                                                   f"Verfügbare Vorlagen: {', '.join(template_names)}\nGeben Sie den Namen der Vorlage ein:")
-            if template_name in templates:
-                PeerEditor(self, self.router_connection, peer=templates[template_name], callback=self.refresh_peers)
+            # Öffne den TemplateSelectionDialog zur Auswahl einer Vorlage
+            dialog = TemplateSelectionDialog(self, self.template_manager)
+            selected_template = dialog.selected_template
+            if selected_template:
+                PeerEditor(self, self.router_connection, peer=templates[selected_template], callback=self.refresh_peers)
             else:
-                messagebox.showwarning("Warnung", "Vorlage nicht gefunden.")
+                messagebox.showwarning("Warnung", "Keine Vorlage ausgewählt.")
         else:
             PeerEditor(self, self.router_connection, callback=self.refresh_peers)
 
