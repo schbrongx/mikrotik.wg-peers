@@ -518,12 +518,18 @@ class WireguardManagerApp(tk.Tk):
         self.connect_to_router()
 
     def create_widgets(self):
+        # Erweiterte Spaltenliste inkl. 'download'
         columns = ("id", "comment", "name", "interface", "public-key", "private-key", 
-                   "allowed-address", "client-address", "client-dns", "client-endpoint", "client-listen-port")
+                   "allowed-address", "client-address", "client-dns", "client-endpoint", 
+                   "client-listen-port", "download")
         self.tree = ttk.Treeview(self, columns=columns, show="headings")
         for col in columns:
-            self.tree.heading(col, text=col.capitalize())
-            self.tree.column(col, width=100, anchor="w")
+            if col == "download":
+                self.tree.heading(col, text="")
+                self.tree.column(col, width=60, anchor="center")
+            else:
+                self.tree.heading(col, text=col.capitalize())
+                self.tree.column(col, width=100, anchor="w")
         
         self.tree.grid(row=0, column=0, columnspan=4, padx=5, pady=5, sticky="nsew")
         vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
@@ -543,6 +549,9 @@ class WireguardManagerApp(tk.Tk):
         delete_button.grid(row=1, column=3, padx=5, pady=5)
         template_button = tk.Button(self, text="Vorlagen verwalten", command=self.manage_templates)
         template_button.grid(row=2, column=0, columnspan=4, padx=5, pady=5)
+        
+        # Event-Bindung für Klicks in der Treeview
+        self.tree.bind("<ButtonRelease-1>", self.on_treeview_click)
 
     def connect_to_router(self):
         # Verwenden Sie den neuen LoginDialog, um alle Login-Daten in einem Fenster abzufragen.
@@ -581,6 +590,7 @@ class WireguardManagerApp(tk.Tk):
                 real_id = peer.get("id")
                 tree_id = real_id or f"peer_{idx}"
                 displayed_id = real_id if real_id else ""
+                # Hinzufügen des Download-Indikators (z. B. Unicode-Pfeil)
                 row_values = (
                     displayed_id,
                     peer.get("comment", ""),
@@ -592,12 +602,60 @@ class WireguardManagerApp(tk.Tk):
                     peer.get("client-address", ""),
                     peer.get("client-dns", ""),
                     peer.get("client-endpoint", ""),
-                    peer.get("client-listen-port", "")
+                    peer.get("client-listen-port", ""),
+                    "⬇"
                 )
                 self.tree.insert("", "end", iid=tree_id, values=row_values)
                 self.peers_data[tree_id] = peer
         except Exception as e:
             messagebox.showerror("Fehler", str(e))
+
+    def on_treeview_click(self, event):
+        # Bestimme, in welchem Bereich geklickt wurde
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            col = self.tree.identify_column(event.x)
+            # Angenommen, die Download-Spalte ist die 12. (Zählung beginnt bei "#1")
+            if col == "#12":
+                row_id = self.tree.identify_row(event.y)
+                if row_id:
+                    peer = self.peers_data.get(row_id)
+                    if peer:
+                        self.download_config(peer)
+    
+    
+    def download_config(self, peer):
+        # Aufbau der Wireguard-Konfiguration
+        config_lines = []
+        config_lines.append("[Interface]")
+        if peer.get("private-key"):
+            config_lines.append("PrivateKey = {}".format(peer["private-key"]))
+        if peer.get("client-address"):
+            config_lines.append("Address = {}".format(peer["client-address"]))
+        if peer.get("client-dns"):
+            config_lines.append("DNS = {}".format(peer["client-dns"]))
+        if peer.get("client-listen-port"):
+            config_lines.append("ListenPort = {}".format(peer["client-listen-port"]))
+        
+        config_lines.append("")
+        config_lines.append("[Peer]")
+        if peer.get("public-key"):
+            config_lines.append("PublicKey = {}".format(peer["public-key"]))
+        if peer.get("allowed-address"):
+            config_lines.append("AllowedIPs = {}".format(peer["allowed-address"]))
+        if peer.get("client-endpoint"):
+            config_lines.append("Endpoint = {}".format(peer["client-endpoint"]))
+        
+        config_text = "\n".join(config_lines)
+        
+        # Dateiname aus dem Peer-Namen ableiten, Leerzeichen durch Unterstriche ersetzen
+        filename = "{}.conf".format(peer.get("name", "wireguard_peer").replace(" ", "_"))
+        try:
+            with open(filename, "w") as f:
+                f.write(config_text)
+            messagebox.showinfo("Download", "Wireguard-Konfigurationsdatei wurde als '{}' erstellt.".format(filename))
+        except Exception as e:
+            messagebox.showerror("Fehler", "Konfigurationsdatei konnte nicht erstellt werden: {}".format(e))
 
     def add_peer(self):
         use_template = messagebox.askyesno("Vorlage verwenden?", "Möchten Sie eine Vorlage verwenden?")
