@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk, filedialog
 import json
 import os
+import io
+import zipfile
 import logging
 from nacl.public import PrivateKey
 import base64
@@ -19,6 +21,29 @@ def generate_keypair():
     priv_key = base64.b64encode(priv.encode()).decode('ascii')
     pub_key = base64.b64encode(priv.public_key.encode()).decode('ascii')
     return priv_key, pub_key
+
+def generate_config_text(peer):
+    config_lines = []
+    config_lines.append("[Interface]")
+    if peer.get("private-key"):
+        config_lines.append("PrivateKey = {}".format(peer["private-key"]))
+    if peer.get("client-address"):
+        config_lines.append("Address = {}".format(peer["client-address"]))
+    if peer.get("client-dns"):
+        config_lines.append("DNS = {}".format(peer["client-dns"]))
+    if peer.get("client-listen-port"):
+        config_lines.append("ListenPort = {}".format(peer["client-listen-port"]))
+    
+    config_lines.append("")
+    config_lines.append("[Peer]")
+    if peer.get("public-key"):
+        config_lines.append("PublicKey = {}".format(peer["public-key"]))
+    if peer.get("allowed-address"):
+        config_lines.append("AllowedIPs = {}".format(peer["allowed-address"]))
+    if peer.get("client-endpoint"):
+        config_lines.append("Endpoint = {}".format(peer["client-endpoint"]))
+    
+    return "\n".join(config_lines)
 
 # -------------------------------
 # ConfigManager: Speichert und lädt Konfigurationsdaten (z. B. Login und Fenstergeometrie)
@@ -518,7 +543,7 @@ class WireguardManagerApp(tk.Tk):
         self.connect_to_router()
 
     def create_widgets(self):
-        # Erweiterte Spaltenliste inkl. 'download'
+        # Bestehende Spalten und Treeview-Konfiguration
         columns = ("id", "comment", "name", "interface", "public-key", "private-key", 
                    "allowed-address", "client-address", "client-dns", "client-endpoint", 
                    "client-listen-port", "download")
@@ -550,7 +575,11 @@ class WireguardManagerApp(tk.Tk):
         template_button = tk.Button(self, text="Vorlagen verwalten", command=self.manage_templates)
         template_button.grid(row=2, column=0, columnspan=4, padx=5, pady=5)
         
-        # Event-Bindung für Klicks in der Treeview
+        # Neuer Button für den ZIP-Download aller Konfigurationen
+        download_zip_button = tk.Button(self, text="Alle Configs als ZIP herunterladen", command=self.download_all_configs)
+        download_zip_button.grid(row=3, column=0, columnspan=4, padx=5, pady=5)
+        
+        # Event-Bindung für Klicks in der Treeview (bereits bestehend)
         self.tree.bind("<ButtonRelease-1>", self.on_treeview_click)
 
     def connect_to_router(self):
@@ -590,7 +619,6 @@ class WireguardManagerApp(tk.Tk):
                 real_id = peer.get("id")
                 tree_id = real_id or f"peer_{idx}"
                 displayed_id = real_id if real_id else ""
-                # Hinzufügen des Download-Indikators (z. B. Unicode-Pfeil)
                 row_values = (
                     displayed_id,
                     peer.get("comment", ""),
@@ -611,11 +639,9 @@ class WireguardManagerApp(tk.Tk):
             messagebox.showerror("Fehler", str(e))
 
     def on_treeview_click(self, event):
-        # Bestimme, in welchem Bereich geklickt wurde
         region = self.tree.identify("region", event.x, event.y)
         if region == "cell":
             col = self.tree.identify_column(event.x)
-            # Angenommen, die Download-Spalte ist die 12. (Zählung beginnt bei "#1")
             if col == "#12":
                 row_id = self.tree.identify_row(event.y)
                 if row_id:
@@ -623,39 +649,69 @@ class WireguardManagerApp(tk.Tk):
                     if peer:
                         self.download_config(peer)
     
-    
     def download_config(self, peer):
-        # Aufbau der Wireguard-Konfiguration
-        config_lines = []
-        config_lines.append("[Interface]")
-        if peer.get("private-key"):
-            config_lines.append("PrivateKey = {}".format(peer["private-key"]))
-        if peer.get("client-address"):
-            config_lines.append("Address = {}".format(peer["client-address"]))
-        if peer.get("client-dns"):
-            config_lines.append("DNS = {}".format(peer["client-dns"]))
-        if peer.get("client-listen-port"):
-            config_lines.append("ListenPort = {}".format(peer["client-listen-port"]))
+        # Hier wird die generate_config_text Funktion verwendet, um den Konfigurations-Text zu erzeugen.
+        config_text = generate_config_text(peer)
         
-        config_lines.append("")
-        config_lines.append("[Peer]")
-        if peer.get("public-key"):
-            config_lines.append("PublicKey = {}".format(peer["public-key"]))
-        if peer.get("allowed-address"):
-            config_lines.append("AllowedIPs = {}".format(peer["allowed-address"]))
-        if peer.get("client-endpoint"):
-            config_lines.append("Endpoint = {}".format(peer["client-endpoint"]))
+        # Standard-Dateiname basierend auf dem Peer-Namen
+        default_filename = "{}.conf".format(peer.get("name", "wireguard_peer").replace(" ", "_"))
         
-        config_text = "\n".join(config_lines)
+        # Öffnen des Save-Dialogs
+        filename = filedialog.asksaveasfilename(
+            title="Speichere Wireguard-Konfigurationsdatei",
+            defaultextension=".conf",
+            initialfile=default_filename,
+            filetypes=[("Konfigurationsdateien", "*.conf"), ("Alle Dateien", "*.*")]
+        )
         
-        # Dateiname aus dem Peer-Namen ableiten, Leerzeichen durch Unterstriche ersetzen
-        filename = "{}.conf".format(peer.get("name", "wireguard_peer").replace(" ", "_"))
+        if not filename:
+            return  # Benutzer hat den Dialog abgebrochen
+        
         try:
             with open(filename, "w") as f:
                 f.write(config_text)
-            messagebox.showinfo("Download", "Wireguard-Konfigurationsdatei wurde als '{}' erstellt.".format(filename))
+            messagebox.showinfo("Download", f"Die Konfigurationsdatei wurde als '{filename}' gespeichert.")
         except Exception as e:
-            messagebox.showerror("Fehler", "Konfigurationsdatei konnte nicht erstellt werden: {}".format(e))
+            messagebox.showerror("Fehler", f"Konfigurationsdatei konnte nicht erstellt werden: {e}")
+
+    def download_all_configs(self):
+        # In-Memory-Stream für das ZIP-Archiv
+        zip_buffer = io.BytesIO()
+        
+        # Erstelle das ZIP-Archiv im Schreibmodus
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Iteriere über alle Peers
+            for peer_id, peer in self.peers_data.items():
+                # Generiere den Konfigurations-Text mithilfe der generate_config_text Funktion
+                config_text = generate_config_text(peer)
+                # Erzeuge einen Dateinamen basierend auf dem Peer-Namen (Leerzeichen durch Unterstriche ersetzen)
+                peer_name = peer.get("name", "wireguard_peer").replace(" ", "_")
+                filename = f"{peer_name}.conf"
+                # Schreibe die Konfiguration als Datei in das ZIP-Archiv
+                zip_file.writestr(filename, config_text)
+        
+        # Setze den Zeiger im Buffer zurück auf den Anfang
+        zip_buffer.seek(0)
+        
+        # Öffne einen Save-Dialog zum Speichern des ZIP-Archivs
+        default_zipname = "wireguard_configs.zip"
+        save_path = filedialog.asksaveasfilename(
+            title="Speichere alle Wireguard-Konfigurationsdateien als ZIP",
+            defaultextension=".zip",
+            initialfile=default_zipname,
+            filetypes=[("ZIP-Dateien", "*.zip"), ("Alle Dateien", "*.*")]
+        )
+        
+        if not save_path:
+            return  # Benutzer hat den Dialog abgebrochen
+        
+        try:
+            # Schreibe den Inhalt des In-Memory-ZIP in die Datei
+            with open(save_path, "wb") as f:
+                f.write(zip_buffer.read())
+            messagebox.showinfo("Download", f"Die ZIP-Datei wurde als '{save_path}' gespeichert.")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Die ZIP-Datei konnte nicht erstellt werden: {e}")
 
     def add_peer(self):
         use_template = messagebox.askyesno("Vorlage verwenden?", "Möchten Sie eine Vorlage verwenden?")
@@ -703,4 +759,3 @@ class WireguardManagerApp(tk.Tk):
 if __name__ == "__main__":
     app = WireguardManagerApp()
     app.mainloop()
-

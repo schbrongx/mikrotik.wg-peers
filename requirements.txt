@@ -1,1 +1,2 @@
 routeros_api>=0.18.1
+PyNaCl
