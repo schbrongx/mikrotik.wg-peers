@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 import json
 import os
 import logging
@@ -62,12 +62,11 @@ class LoginDialog(tk.Toplevel):
         self.title("Login zum Router")
         self.config_manager = config_manager
         self.result = None
-        # BooleanVar für Checkbox "Passwort speichern"
         self.save_password_var = tk.BooleanVar()
-        # Standardwert aus der Konfiguration (falls vorhanden)
         login_defaults = self.config_manager.get("login", {})
         self.save_password_var.set(login_defaults.get("save_password", False))
         self.create_widgets()
+        self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()  # Modal
         self.protocol("WM_DELETE_WINDOW", self.on_cancel)
         self.wait_window(self)
@@ -76,7 +75,6 @@ class LoginDialog(tk.Toplevel):
         login_defaults = self.config_manager.get("login", {})
         host_default = login_defaults.get("host", "")
         username_default = login_defaults.get("username", "")
-        # Passwort nur übernehmen, wenn das Flag gesetzt ist
         password_default = login_defaults.get("password", "") if login_defaults.get("save_password") else ""
         port_default = login_defaults.get("port", 8728)
 
@@ -104,7 +102,6 @@ class LoginDialog(tk.Toplevel):
         self.entry_port.grid(row=3, column=1, padx=5, pady=5)
         self.entry_port.insert(0, str(port_default))
 
-        # Checkbox: Passwort speichern?
         self.check_save_password = tk.Checkbutton(self, text="Passwort speichern", variable=self.save_password_var)
         self.check_save_password.grid(row=4, column=0, columnspan=2, pady=5)
 
@@ -253,6 +250,7 @@ class TemplateSelectionDialog(tk.Toplevel):
         self.title("Vorlage auswählen")
         self.selected_template = None
         self.create_widgets()
+        self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()
         self.protocol("WM_DELETE_WINDOW", self.on_cancel)
         self.wait_window(self)
@@ -290,6 +288,7 @@ class PeerEditor(tk.Toplevel):
         self.callback = callback  # Rückruf nach erfolgreicher Änderung
         self.title("Peer bearbeiten" if peer else "Peer hinzufügen")
         self.create_widgets()
+        self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()  # Modal
 
     def create_widgets(self):
@@ -374,6 +373,7 @@ class TemplateManagerUI(tk.Toplevel):
         self.title("Vorlagen verwalten")
         self.create_widgets()
         self.refresh_list()
+        self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()
 
     def create_widgets(self):
@@ -426,6 +426,7 @@ class TemplateEditor(tk.Toplevel):
         self.callback = callback
         self.title("Vorlage bearbeiten" if not new_template else "Vorlage hinzufügen")
         self.create_widgets()
+        self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()
 
     def create_widgets(self):
@@ -486,6 +487,9 @@ class WireguardManagerApp(tk.Tk):
         self.create_widgets()
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
+        self.bind("<Delete>", lambda event: self.delete_peer())
+        self.bind("<Double-1>", lambda event: self.edit_peer())
+        self.bind("<Return>", lambda event: self.edit_peer())
         self.connect_to_router()
 
     def create_widgets(self):
@@ -604,7 +608,8 @@ class WireguardManagerApp(tk.Tk):
         if peer:
             if messagebox.askyesno("Bestätigen", "Peer wirklich löschen?"):
                 try:
-                    self.router_connection.delete_peer(peer.get(".id"))
+                    # Verwenden Sie "id" statt ".id"
+                    self.router_connection.delete_peer(peer.get("id"))
                     self.refresh_peers()
                 except Exception as e:
                     messagebox.showerror("Fehler", str(e))
@@ -612,7 +617,7 @@ class WireguardManagerApp(tk.Tk):
     def manage_templates(self):
         TemplateManagerUI(self, self.template_manager)
 
-
 if __name__ == "__main__":
     app = WireguardManagerApp()
     app.mainloop()
+
