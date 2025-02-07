@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 import json
 import os
 import logging
@@ -8,9 +8,7 @@ from nacl.public import PrivateKey
 import base64
 import routeros_api
 
-
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
-
 
 def generate_keypair():
     """
@@ -21,7 +19,6 @@ def generate_keypair():
     priv_key = base64.b64encode(priv.encode()).decode('ascii')
     pub_key = base64.b64encode(priv.public_key.encode()).decode('ascii')
     return priv_key, pub_key
-
 
 # -------------------------------
 # ConfigManager: Speichert und lädt Konfigurationsdaten (z. B. Login und Fenstergeometrie)
@@ -55,6 +52,77 @@ class ConfigManager:
     
     def set(self, key, value):
         self.config[key] = value
+
+# -------------------------------
+# Neuer LoginDialog: Alle Logindaten in einem Fenster abfragen
+# -------------------------------
+class LoginDialog(tk.Toplevel):
+    def __init__(self, master, config_manager):
+        super().__init__(master)
+        self.title("Login zum Router")
+        self.config_manager = config_manager
+        self.result = None
+        self.create_widgets()
+        self.grab_set()  # Modal
+        self.protocol("WM_DELETE_WINDOW", self.on_cancel)
+        self.wait_window(self)
+
+    def create_widgets(self):
+        login_defaults = self.config_manager.get("login", {})
+        host_default = login_defaults.get("host", "")
+        username_default = login_defaults.get("username", "")
+        port_default = login_defaults.get("port", 8728)
+
+        label_host = tk.Label(self, text="Router IP/Hostname:")
+        label_host.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.entry_host = tk.Entry(self, width=40)
+        self.entry_host.grid(row=0, column=1, padx=5, pady=5)
+        self.entry_host.insert(0, host_default)
+
+        label_username = tk.Label(self, text="Username:")
+        label_username.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.entry_username = tk.Entry(self, width=40)
+        self.entry_username.grid(row=1, column=1, padx=5, pady=5)
+        self.entry_username.insert(0, username_default)
+
+        label_password = tk.Label(self, text="Password:")
+        label_password.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.entry_password = tk.Entry(self, width=40, show="*")
+        self.entry_password.grid(row=2, column=1, padx=5, pady=5)
+
+        label_port = tk.Label(self, text="Port:")
+        label_port.grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        self.entry_port = tk.Entry(self, width=40)
+        self.entry_port.grid(row=3, column=1, padx=5, pady=5)
+        self.entry_port.insert(0, str(port_default))
+
+        button_frame = tk.Frame(self)
+        button_frame.grid(row=4, column=0, columnspan=2, pady=10)
+        ok_button = tk.Button(button_frame, text="OK", command=self.on_ok)
+        ok_button.pack(side="left", padx=5)
+        cancel_button = tk.Button(button_frame, text="Abbrechen", command=self.on_cancel)
+        cancel_button.pack(side="left", padx=5)
+
+    def on_ok(self):
+        host = self.entry_host.get().strip()
+        username = self.entry_username.get().strip()
+        password = self.entry_password.get().strip()
+        try:
+            port = int(self.entry_port.get().strip())
+        except ValueError:
+            messagebox.showerror("Fehler", "Ungültiger Port. Bitte eine Zahl eingeben.")
+            return
+        if not host or not username or not password:
+            messagebox.showerror("Fehler", "Bitte alle Felder ausfüllen.")
+            return
+        self.result = {"host": host, "username": username, "password": password, "port": port}
+        self.grab_release()
+        self.destroy()
+
+    def on_cancel(self):
+        self.result = None
+        self.grab_release()
+        self.destroy()
 
 # -------------------------------
 # Klasse zur Verwaltung der Router-Verbindung
@@ -174,15 +242,14 @@ class TemplateSelectionDialog(tk.Toplevel):
     def create_widgets(self):
         self.listbox = tk.Listbox(self, width=50)
         self.listbox.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-        # Füllen Sie die Listbox mit den vorhandenen Vorlagennamen
         for name in self.template_manager.get_templates().keys():
             self.listbox.insert(tk.END, name)
         button_frame = tk.Frame(self)
         button_frame.pack(padx=10, pady=10)
         ok_button = tk.Button(button_frame, text="OK", command=self.on_ok)
-        ok_button.pack(side=tk.LEFT, padx=5)
+        ok_button.pack(side="left", padx=5)
         cancel_button = tk.Button(button_frame, text="Abbrechen", command=self.on_cancel)
-        cancel_button.pack(side=tk.LEFT, padx=5)
+        cancel_button.pack(side="left", padx=5)
 
     def on_ok(self):
         selection = self.listbox.curselection()
@@ -230,7 +297,6 @@ class PeerEditor(tk.Toplevel):
             label.grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
             entry = tk.Entry(self, width=50)
             entry.grid(row=row, column=1, padx=5, pady=5)
-            # Bei "id" setzen wir den Wert und deaktivieren das Feld:
             if key == "id" and self.peer:
                 entry.insert(0, self.peer.get(".id", ""))
                 entry.configure(state="disabled")
@@ -250,14 +316,12 @@ class PeerEditor(tk.Toplevel):
         cancel_button.grid(row=row, column=1, padx=5, pady=5)
 
     def generate_keys(self):
-        # Prüfe, ob in den Feldern bereits ein Schlüssel steht
         current_pub = self.entries["public-key"].get()
         current_priv = self.entries["private-key"].get()
         if current_pub or current_priv:
             overwrite = messagebox.askyesno("Überschreiben?", "Ein Schlüsselpaar existiert bereits. Möchten Sie es überschreiben?")
             if not overwrite:
                 return
-        # Erzeuge ein neues Schlüsselpaar
         priv_key, pub_key = generate_keypair()
         self.entries["public-key"].delete(0, tk.END)
         self.entries["public-key"].insert(0, pub_key)
@@ -271,7 +335,6 @@ class PeerEditor(tk.Toplevel):
             value = self.entries[key].get()
             config[key] = value if value is not None else ""
         try:
-            # Verwenden Sie "id" statt ".id"
             if self.peer and self.peer.get("id"):
                 peer_id = self.peer.get("id")
                 self.router_connection.update_peer(peer_id, config)
@@ -282,7 +345,6 @@ class PeerEditor(tk.Toplevel):
             self.destroy()
         except Exception as e:
             messagebox.showerror("Fehler", str(e))
-
 
 # -------------------------------
 # UI zur Verwaltung von Vorlagen
@@ -409,7 +471,6 @@ class WireguardManagerApp(tk.Tk):
         self.connect_to_router()
 
     def create_widgets(self):
-        # Treeview zur Anzeige der Peers mit mehreren Spalten
         columns = ("id", "comment", "name", "interface", "public-key", "private-key", 
                    "allowed-address", "client-address", "client-dns", "client-endpoint", "client-listen-port")
         self.tree = ttk.Treeview(self, columns=columns, show="headings")
@@ -437,25 +498,16 @@ class WireguardManagerApp(tk.Tk):
         template_button.grid(row=2, column=0, columnspan=4, padx=5, pady=5)
 
     def connect_to_router(self):
-        # Versuchen, gespeicherte Login-Daten als Standardwerte zu laden
-        login_defaults = self.config_manager.get("login", {})
-        host_default = login_defaults.get("host", "")
-        username_default = login_defaults.get("username", "")
-        port_default = login_defaults.get("port", 8728)
-
-        host = simpledialog.askstring("Router Verbindung", "Router IP/Hostname:", initialvalue=host_default)
-        if not host:
+        # Verwenden Sie den neuen LoginDialog, um alle Login-Daten in einem Fenster abzufragen.
+        login_dialog = LoginDialog(self, self.config_manager)
+        if login_dialog.result is None:
             self.quit()
             return
-        username = simpledialog.askstring("Router Verbindung", "Username:", initialvalue=username_default)
-        if not username:
-            self.quit()
-            return
-        password = simpledialog.askstring("Router Verbindung", "Password:", show="*")
-        if not password:
-            self.quit()
-            return
-        port = simpledialog.askinteger("Router Verbindung", "Port (Standard 8728):", initialvalue=port_default)
+        result = login_dialog.result
+        host = result["host"]
+        username = result["username"]
+        password = result["password"]
+        port = result["port"]
 
         self.router_connection = RouterConnection(host, username, password, port)
         try:
@@ -475,7 +527,6 @@ class WireguardManagerApp(tk.Tk):
                 self.tree.delete(item)
             self.peers_data = {}
             for idx, peer in enumerate(peers):
-                # Verwenden Sie "id" statt ".id"
                 real_id = peer.get("id")
                 tree_id = real_id or f"peer_{idx}"
                 displayed_id = real_id if real_id else ""
