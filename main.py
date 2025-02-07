@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk, filedialog
-import json
-import os
-import io
-import zipfile
-import logging
-from nacl.public import PrivateKey
 import base64
+import io
+import json
+import logging
+import os
+import sys
+import zipfile
+import tkinter as tk
+from tkinter import filedialog, messagebox, simpledialog, ttk
+
+from nacl.public import PrivateKey
 import routeros_api
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s %(levelname)s: %(message)s')
 
 def generate_keypair():
     """
@@ -586,7 +588,8 @@ class WireguardManagerApp(tk.Tk):
         # Verwenden Sie den neuen LoginDialog, um alle Login-Daten in einem Fenster abzufragen.
         login_dialog = LoginDialog(self, self.config_manager)
         if login_dialog.result is None:
-            self.quit()
+            self.destroy()
+            sys.exit(0)
             return
         result = login_dialog.result
         host = result["host"]
