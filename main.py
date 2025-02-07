@@ -16,8 +16,7 @@ logging.basicConfig(level=logging.ERROR, format='%(asctime)s %(levelname)s: %(me
 
 def generate_keypair():
     """
-    Erzeugt ein neues Schlüsselpaar (privater und öffentlicher Schlüssel)
-    mithilfe von PyNaCl.
+    Generates a new key pair (private and public key) using PyNaCl.
     """
     priv = PrivateKey.generate()
     priv_key = base64.b64encode(priv.encode()).decode('ascii')
@@ -47,9 +46,9 @@ def generate_config_text(peer):
     
     return "\n".join(config_lines)
 
-# -------------------------------
-# ConfigManager: Speichert und lädt Konfigurationsdaten (z. B. Login und Fenstergeometrie)
-# -------------------------------
+# -------------------------------------------------------------------
+# ConfigManager: Saves and loads configuration data (e.g. login and window geometry)
+# -------------------------------------------------------------------
 class ConfigManager:
     def __init__(self, filename="config.json"):
         self.filename = filename
@@ -62,7 +61,7 @@ class ConfigManager:
                 with open(self.filename, "r") as f:
                     self.config = json.load(f)
             except Exception as e:
-                logging.error("Fehler beim Laden der Konfiguration: %s", e)
+                logging.error("Error loading configuration: %s", e)
                 self.config = {}
         else:
             self.config = {}
@@ -72,7 +71,7 @@ class ConfigManager:
             with open(self.filename, "w") as f:
                 json.dump(self.config, f, indent=4)
         except Exception as e:
-            logging.error("Fehler beim Speichern der Konfiguration: %s", e)
+            logging.error("Error saving configuration: %s", e)
             
     def get(self, key, default=None):
         return self.config.get(key, default)
@@ -80,13 +79,13 @@ class ConfigManager:
     def set(self, key, value):
         self.config[key] = value
 
-# -------------------------------
-# Neuer LoginDialog: Alle Logindaten in einem Fenster abfragen
-# -------------------------------
+# -------------------------------------------------------------------
+# LoginDialog: Collects all login data in a single window
+# -------------------------------------------------------------------
 class LoginDialog(tk.Toplevel):
     def __init__(self, master, config_manager):
         super().__init__(master)
-        self.title("Login zum Router")
+        self.title("Router Login")
         self.transient(master)
         self.lift()
         self.attributes("-topmost", True)
@@ -134,31 +133,31 @@ class LoginDialog(tk.Toplevel):
         self.entry_port.grid(row=3, column=1, padx=5, pady=5)
         self.entry_port.insert(0, str(port_default))
 
-        self.check_save_password = tk.Checkbutton(self, text="Passwort speichern", variable=self.save_password_var)
+        self.check_save_password = tk.Checkbutton(self, text="Save password", variable=self.save_password_var)
         self.check_save_password.grid(row=4, column=0, columnspan=2, pady=5)
 
         button_frame = tk.Frame(self)
         button_frame.grid(row=5, column=0, columnspan=2, pady=10)
         ok_button = tk.Button(button_frame, text="OK", command=self.on_ok)
         ok_button.pack(side="left", padx=5)
-        cancel_button = tk.Button(button_frame, text="Abbrechen", command=self.on_cancel)
+        cancel_button = tk.Button(button_frame, text="Cancel", command=self.on_cancel)
         cancel_button.pack(side="left", padx=5)
 
     def center(self):
-        self.update_idletasks()  # Aktualisiert die Fenstermaße
+        self.update_idletasks()  # Update window dimensions
         master = self.master
         
-        # Abfrage der Position und Größe des Hauptfensters
+        # Get position and size of the main window
         master_x = master.winfo_rootx()
         master_y = master.winfo_rooty()
         master_width = master.winfo_width()
         master_height = master.winfo_height()
         
-        # Abfrage der Dimensionen des Login-Fensters
+        # Get dimensions of the login window
         dialog_width = self.winfo_width()
         dialog_height = self.winfo_height()
         
-        # Berechnung der neuen Position (Zentrierung)
+        # Calculate new position (centered)
         x = master_x + (master_width // 2) - (dialog_width // 2)
         y = master_y + (master_height // 2) - (dialog_height // 2)
         
@@ -171,10 +170,10 @@ class LoginDialog(tk.Toplevel):
         try:
             port = int(self.entry_port.get().strip())
         except ValueError:
-            messagebox.showerror("Fehler", "Ungültiger Port. Bitte eine Zahl eingeben.")
+            messagebox.showerror("Error", "Invalid port. Please enter a number.")
             return
         if not host or not username or not password:
-            messagebox.showerror("Fehler", "Bitte alle Felder ausfüllen.")
+            messagebox.showerror("Error", "Please fill out all fields.")
             return
         self.result = {
             "host": host,
@@ -191,9 +190,9 @@ class LoginDialog(tk.Toplevel):
         self.grab_release()
         self.destroy()
 
-# -------------------------------
-# Klasse zur Verwaltung der Router-Verbindung
-# -------------------------------
+# -------------------------------------------------------------------
+# RouterConnection: Manages the connection to the router
+# -------------------------------------------------------------------
 class RouterConnection:
     def __init__(self, host, username, password, port=8728):
         self.host = host
@@ -205,7 +204,7 @@ class RouterConnection:
     def connect(self):
         try:
             logger = logging.getLogger("routeros_api")
-            logging.debug("Verbindung zu Router '%s' auf Port %s herstellen...", self.host, self.port)
+            logging.debug("Connecting to router '%s' on port %s...", self.host, self.port)
             pool = routeros_api.RouterOsApiPool(
                 self.host,
                 username=self.username,
@@ -214,50 +213,50 @@ class RouterConnection:
                 plaintext_login=True
             )
             self.api = pool.get_api()
-            logging.debug("Verbindung erfolgreich hergestellt.")
+            logging.debug("Connection successful.")
         except Exception as e:
-            raise Exception("Fehler beim Verbinden: " + str(e))
+            raise Exception("Error connecting: " + str(e))
 
     def get_peers(self):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
-            logging.debug("Sende Befehl: /interface/wireguard/peers/print")
+            logging.debug("Sending command: /interface/wireguard/peers/print")
             peers = peers_resource.get()
-            logging.debug("Empfangen: %s", peers)
+            logging.debug("Received: %s", peers)
             return peers
         except Exception as e:
-            raise Exception("Fehler beim Abrufen der Peers: " + str(e))
+            raise Exception("Error retrieving peers: " + str(e))
 
     def add_peer(self, config):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
-            logging.debug("Sende Befehl zum Hinzufügen eines Peers mit Konfiguration: %s", config)
+            logging.debug("Sending command to add a peer with configuration: %s", config)
             peers_resource.add(**config)
-            logging.debug("Peer erfolgreich hinzugefügt.")
+            logging.debug("Peer added successfully.")
         except Exception as e:
-            raise Exception("Fehler beim Hinzufügen des Peers: " + str(e))
+            raise Exception("Error adding peer: " + str(e))
 
     def update_peer(self, peer_id, config):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
-            logging.debug("Sende Befehl zum Aktualisieren des Peers mit ID '%s' und Konfiguration: %s", peer_id, config)
+            logging.debug("Sending command to update peer with ID '%s' and configuration: %s", peer_id, config)
             peers_resource.set(id=peer_id, **config)
-            logging.debug("Peer mit ID '%s' erfolgreich aktualisiert.", peer_id)
+            logging.debug("Peer with ID '%s' updated successfully.", peer_id)
         except Exception as e:
-            raise Exception("Fehler beim Aktualisieren des Peers: " + str(e))
+            raise Exception("Error updating peer: " + str(e))
 
     def delete_peer(self, peer_id):
         try:
             peers_resource = self.api.get_resource('/interface/wireguard/peers')
-            logging.debug("Sende Befehl zum Löschen des Peers mit ID '%s'", peer_id)
+            logging.debug("Sending command to delete peer with ID '%s'", peer_id)
             peers_resource.remove(id=peer_id)
-            logging.debug("Peer mit ID '%s' erfolgreich gelöscht.", peer_id)
+            logging.debug("Peer with ID '%s' deleted successfully.", peer_id)
         except Exception as e:
-            raise Exception("Fehler beim Löschen des Peers: " + str(e))
+            raise Exception("Error deleting peer: " + str(e))
 
-# -------------------------------
-# Klasse zur Verwaltung von Peer-Vorlagen
-# -------------------------------
+# -------------------------------------------------------------------
+# TemplateManager: Manages peer templates
+# -------------------------------------------------------------------
 class TemplateManager:
     def __init__(self, filename="wg_peer_templates.json"):
         self.filename = filename
@@ -292,14 +291,14 @@ class TemplateManager:
     def get_templates(self):
         return self.templates
 
-# -------------------------------
-# Dialog zur Auswahl eines Templates
-# -------------------------------
+# -------------------------------------------------------------------
+# TemplateSelectionDialog: Dialog for selecting a template
+# -------------------------------------------------------------------
 class TemplateSelectionDialog(tk.Toplevel):
     def __init__(self, master, template_manager):
         super().__init__(master)
         self.template_manager = template_manager
-        self.title("Vorlage auswählen")
+        self.title("Select Template")
         self.selected_template = None
         self.create_widgets()
         self.bind("<Escape>", lambda event: self.destroy())
@@ -316,7 +315,7 @@ class TemplateSelectionDialog(tk.Toplevel):
         button_frame.pack(padx=10, pady=10)
         ok_button = tk.Button(button_frame, text="OK", command=self.on_ok)
         ok_button.pack(side="left", padx=5)
-        cancel_button = tk.Button(button_frame, text="Abbrechen", command=self.on_cancel)
+        cancel_button = tk.Button(button_frame, text="Cancel", command=self.on_cancel)
         cancel_button.pack(side="left", padx=5)
 
     def on_ok(self):
@@ -329,16 +328,16 @@ class TemplateSelectionDialog(tk.Toplevel):
         self.selected_template = None
         self.destroy()
 
-# -------------------------------
-# Dialog zur Bearbeitung/Hinzufügung eines Peers
-# -------------------------------
+# -------------------------------------------------------------------
+# PeerEditor: Dialog for editing/adding a peer
+# -------------------------------------------------------------------
 class PeerEditor(tk.Toplevel):
     def __init__(self, master, router_connection, peer=None, callback=None):
         super().__init__(master)
         self.router_connection = router_connection
         self.peer = peer
-        self.callback = callback  # Rückruf nach erfolgreicher Änderung
-        self.title("Peer bearbeiten" if peer else "Peer hinzufügen")
+        self.callback = callback  # Callback after successful update
+        self.title("Edit Peer" if peer else "Add Peer")
         self.create_widgets()
         self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()  # Modal
@@ -375,20 +374,20 @@ class PeerEditor(tk.Toplevel):
             self.entries[key] = entry
             row += 1
 
-        keygen_button = tk.Button(self, text="Schlüsselpaar generieren", command=self.generate_keys)
+        keygen_button = tk.Button(self, text="Generate key pair", command=self.generate_keys)
         keygen_button.grid(row=row, column=0, columnspan=2, padx=5, pady=5)
         row += 1
 
-        save_button = tk.Button(self, text="Speichern", command=self.save)
+        save_button = tk.Button(self, text="Save", command=self.save)
         save_button.grid(row=row, column=0, padx=5, pady=5)
-        cancel_button = tk.Button(self, text="Abbrechen", command=self.destroy)
+        cancel_button = tk.Button(self, text="Cancel", command=self.destroy)
         cancel_button.grid(row=row, column=1, padx=5, pady=5)
 
     def generate_keys(self):
         current_pub = self.entries["public-key"].get()
         current_priv = self.entries["private-key"].get()
         if current_pub or current_priv:
-            overwrite = messagebox.askyesno("Überschreiben?", "Ein Schlüsselpaar existiert bereits. Möchten Sie es überschreiben?")
+            overwrite = messagebox.askyesno("Overwrite?", "A key pair already exists. Do you want to overwrite it?")
             if not overwrite:
                 return
         priv_key, pub_key = generate_keypair()
@@ -396,7 +395,7 @@ class PeerEditor(tk.Toplevel):
         self.entries["public-key"].insert(0, pub_key)
         self.entries["private-key"].delete(0, tk.END)
         self.entries["private-key"].insert(0, priv_key)
-        logging.debug("Neues Schlüsselpaar generiert: Public Key: %s, Private Key: %s", pub_key, priv_key)
+        logging.debug("New key pair generated: Public Key: %s, Private Key: %s", pub_key, priv_key)
 
     def save(self):
         config = {}
@@ -413,16 +412,16 @@ class PeerEditor(tk.Toplevel):
                 self.callback()
             self.destroy()
         except Exception as e:
-            messagebox.showerror("Fehler", str(e))
+            messagebox.showerror("Error", str(e))
 
-# -------------------------------
-# UI zur Verwaltung von Vorlagen
-# -------------------------------
+# -------------------------------------------------------------------
+# TemplateManagerUI: User interface for managing templates
+# -------------------------------------------------------------------
 class TemplateManagerUI(tk.Toplevel):
     def __init__(self, master, template_manager):
         super().__init__(master)
         self.template_manager = template_manager
-        self.title("Vorlagen verwalten")
+        self.title("Manage Templates")
         self.create_widgets()
         self.refresh_list()
         self.bind("<Escape>", lambda event: self.destroy())
@@ -431,11 +430,11 @@ class TemplateManagerUI(tk.Toplevel):
     def create_widgets(self):
         self.listbox = tk.Listbox(self, width=50)
         self.listbox.grid(row=0, column=0, columnspan=2, padx=5, pady=5)
-        add_button = tk.Button(self, text="Hinzufügen", command=self.add_template)
+        add_button = tk.Button(self, text="Add", command=self.add_template)
         add_button.grid(row=1, column=0, padx=5, pady=5)
-        edit_button = tk.Button(self, text="Bearbeiten", command=self.edit_template)
+        edit_button = tk.Button(self, text="Edit", command=self.edit_template)
         edit_button.grid(row=1, column=1, padx=5, pady=5)
-        delete_button = tk.Button(self, text="Löschen", command=self.delete_template)
+        delete_button = tk.Button(self, text="Delete", command=self.delete_template)
         delete_button.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
 
     def refresh_list(self):
@@ -444,14 +443,14 @@ class TemplateManagerUI(tk.Toplevel):
             self.listbox.insert(tk.END, name)
 
     def add_template(self):
-        name = simpledialog.askstring("Neue Vorlage", "Name der Vorlage:")
+        name = simpledialog.askstring("New Template", "Template name:")
         if name:
             TemplateEditor(self, name, self.template_manager, new_template=True, callback=self.refresh_list)
 
     def edit_template(self):
         selection = self.listbox.curselection()
         if not selection:
-            messagebox.showwarning("Warnung", "Bitte wählen Sie eine Vorlage aus.")
+            messagebox.showwarning("Warning", "Please select a template.")
             return
         name = self.listbox.get(selection[0])
         TemplateEditor(self, name, self.template_manager, new_template=False, callback=self.refresh_list)
@@ -459,16 +458,16 @@ class TemplateManagerUI(tk.Toplevel):
     def delete_template(self):
         selection = self.listbox.curselection()
         if not selection:
-            messagebox.showwarning("Warnung", "Bitte wählen Sie eine Vorlage aus.")
+            messagebox.showwarning("Warning", "Please select a template.")
             return
         name = self.listbox.get(selection[0])
-        if messagebox.askyesno("Bestätigen", f"Vorlage '{name}' wirklich löschen?"):
+        if messagebox.askyesno("Confirm", f"Really delete template '{name}'?"):
             self.template_manager.delete_template(name)
             self.refresh_list()
 
-# -------------------------------
-# Editor-Fenster für Vorlagen (ähnlich wie PeerEditor)
-# -------------------------------
+# -------------------------------------------------------------------
+# TemplateEditor: Dialog for editing/adding a template (similar to PeerEditor)
+# -------------------------------------------------------------------
 class TemplateEditor(tk.Toplevel):
     def __init__(self, master, template_name, template_manager, new_template=True, callback=None):
         super().__init__(master)
@@ -476,7 +475,7 @@ class TemplateEditor(tk.Toplevel):
         self.template_manager = template_manager
         self.new_template = new_template
         self.callback = callback
-        self.title("Vorlage bearbeiten" if not new_template else "Vorlage hinzufügen")
+        self.title("Edit Template" if not new_template else "Add Template")
         self.create_widgets()
         self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()
@@ -509,9 +508,9 @@ class TemplateEditor(tk.Toplevel):
             for key in self.entries:
                 self.entries[key].insert(0, config.get(key, ""))
 
-        save_button = tk.Button(self, text="Speichern", command=self.save)
+        save_button = tk.Button(self, text="Save", command=self.save)
         save_button.grid(row=row, column=0, padx=5, pady=5)
-        cancel_button = tk.Button(self, text="Abbrechen", command=self.destroy)
+        cancel_button = tk.Button(self, text="Cancel", command=self.destroy)
         cancel_button.grid(row=row, column=1, padx=5, pady=5)
 
     def save(self):
@@ -526,14 +525,14 @@ class TemplateEditor(tk.Toplevel):
             self.callback()
         self.destroy()
 
-# -------------------------------
-# Hauptanwendung: GUI für die Verwaltung der Wireguard-Peers
-# -------------------------------
+# -------------------------------------------------------------------
+# WireguardManagerApp: Main application for managing Wireguard peers
+# -------------------------------------------------------------------
 class WireguardManagerApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Wireguard Peer Manager")
-        self.config_manager = ConfigManager()  # ConfigManager initialisieren
+        self.config_manager = ConfigManager()  # Initialize ConfigManager
         self.router_connection = None
         self.template_manager = TemplateManager()
         self.create_widgets()
@@ -545,7 +544,7 @@ class WireguardManagerApp(tk.Tk):
         self.connect_to_router()
 
     def create_widgets(self):
-        # Bestehende Spalten und Treeview-Konfiguration
+        # Treeview configuration with existing columns
         columns = ("id", "comment", "name", "interface", "public-key", "private-key", 
                    "allowed-address", "client-address", "client-dns", "client-endpoint", 
                    "client-listen-port", "download")
@@ -566,26 +565,26 @@ class WireguardManagerApp(tk.Tk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         
-        refresh_button = tk.Button(self, text="Aktualisieren", command=self.refresh_peers)
+        refresh_button = tk.Button(self, text="Refresh", command=self.refresh_peers)
         refresh_button.grid(row=1, column=0, padx=5, pady=5)
-        add_button = tk.Button(self, text="Peer hinzufügen", command=self.add_peer)
+        add_button = tk.Button(self, text="Add Peer", command=self.add_peer)
         add_button.grid(row=1, column=1, padx=5, pady=5)
-        edit_button = tk.Button(self, text="Peer bearbeiten", command=self.edit_peer)
+        edit_button = tk.Button(self, text="Edit Peer", command=self.edit_peer)
         edit_button.grid(row=1, column=2, padx=5, pady=5)
-        delete_button = tk.Button(self, text="Peer löschen", command=self.delete_peer)
+        delete_button = tk.Button(self, text="Delete Peer", command=self.delete_peer)
         delete_button.grid(row=1, column=3, padx=5, pady=5)
-        template_button = tk.Button(self, text="Vorlagen verwalten", command=self.manage_templates)
+        template_button = tk.Button(self, text="Manage Templates", command=self.manage_templates)
         template_button.grid(row=2, column=0, columnspan=4, padx=5, pady=5)
         
-        # Neuer Button für den ZIP-Download aller Konfigurationen
-        download_zip_button = tk.Button(self, text="Alle Configs als ZIP herunterladen", command=self.download_all_configs)
+        # New button for downloading all configurations as ZIP
+        download_zip_button = tk.Button(self, text="Download all configs as ZIP", command=self.download_all_configs)
         download_zip_button.grid(row=3, column=0, columnspan=4, padx=5, pady=5)
         
-        # Event-Bindung für Klicks in der Treeview (bereits bestehend)
+        # Bind click events in the Treeview
         self.tree.bind("<ButtonRelease-1>", self.on_treeview_click)
 
     def connect_to_router(self):
-        # Verwenden Sie den neuen LoginDialog, um alle Login-Daten in einem Fenster abzufragen.
+        # Use the LoginDialog to collect all login data in one window.
         login_dialog = LoginDialog(self, self.config_manager)
         if login_dialog.result is None:
             self.destroy()
@@ -601,7 +600,7 @@ class WireguardManagerApp(tk.Tk):
         try:
             self.router_connection.connect()
             self.refresh_peers()
-            # Speichern der Logindaten (inklusive Passwort, wenn gewählt)
+            # Save login data (including password if chosen)
             login_data = {"host": host, "username": username, "port": port}
             if result.get("save_password"):
                 login_data["password"] = password
@@ -609,7 +608,7 @@ class WireguardManagerApp(tk.Tk):
             self.config_manager.set("login", login_data)
             self.config_manager.save()
         except Exception as e:
-            messagebox.showerror("Verbindungsfehler", str(e))
+            messagebox.showerror("Connection Error", str(e))
             self.quit()
 
     def refresh_peers(self):
@@ -639,7 +638,7 @@ class WireguardManagerApp(tk.Tk):
                 self.tree.insert("", "end", iid=tree_id, values=row_values)
                 self.peers_data[tree_id] = peer
         except Exception as e:
-            messagebox.showerror("Fehler", str(e))
+            messagebox.showerror("Error", str(e))
 
     def on_treeview_click(self, event):
         region = self.tree.identify("region", event.x, event.y)
@@ -653,89 +652,89 @@ class WireguardManagerApp(tk.Tk):
                         self.download_config(peer)
     
     def download_config(self, peer):
-        # Hier wird die generate_config_text Funktion verwendet, um den Konfigurations-Text zu erzeugen.
+        # Use generate_config_text function to generate the configuration text.
         config_text = generate_config_text(peer)
         
-        # Standard-Dateiname basierend auf dem Peer-Namen
+        # Standard filename based on the peer name
         default_filename = "{}.conf".format(peer.get("name", "wireguard_peer").replace(" ", "_"))
         
-        # Öffnen des Save-Dialogs
+        # Open the Save Dialog
         filename = filedialog.asksaveasfilename(
-            title="Speichere Wireguard-Konfigurationsdatei",
+            title="Save Wireguard configuration file",
             defaultextension=".conf",
             initialfile=default_filename,
-            filetypes=[("Konfigurationsdateien", "*.conf"), ("Alle Dateien", "*.*")]
+            filetypes=[("Configuration files", "*.conf"), ("All files", "*.*")]
         )
         
         if not filename:
-            return  # Benutzer hat den Dialog abgebrochen
+            return  # User cancelled the dialog
         
         try:
             with open(filename, "w") as f:
                 f.write(config_text)
-            messagebox.showinfo("Download", f"Die Konfigurationsdatei wurde als '{filename}' gespeichert.")
+            messagebox.showinfo("Download", f"Configuration file saved as '{filename}'.")
         except Exception as e:
-            messagebox.showerror("Fehler", f"Konfigurationsdatei konnte nicht erstellt werden: {e}")
+            messagebox.showerror("Error", f"Configuration file could not be created: {e}")
 
     def download_all_configs(self):
-        # In-Memory-Stream für das ZIP-Archiv
+        # In-memory stream for the ZIP archive
         zip_buffer = io.BytesIO()
         
-        # Erstelle das ZIP-Archiv im Schreibmodus
+        # Create the ZIP archive in write mode
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # Iteriere über alle Peers
+            # Iterate over all peers
             for peer_id, peer in self.peers_data.items():
-                # Generiere den Konfigurations-Text mithilfe der generate_config_text Funktion
+                # Generate configuration text using generate_config_text function
                 config_text = generate_config_text(peer)
-                # Erzeuge einen Dateinamen basierend auf dem Peer-Namen (Leerzeichen durch Unterstriche ersetzen)
+                # Create a filename based on the peer name (replace spaces with underscores)
                 peer_name = peer.get("name", "wireguard_peer").replace(" ", "_")
                 filename = f"{peer_name}.conf"
-                # Schreibe die Konfiguration als Datei in das ZIP-Archiv
+                # Write the configuration file into the ZIP archive
                 zip_file.writestr(filename, config_text)
         
-        # Setze den Zeiger im Buffer zurück auf den Anfang
+        # Reset the buffer pointer to the beginning
         zip_buffer.seek(0)
         
-        # Öffne einen Save-Dialog zum Speichern des ZIP-Archivs
+        # Open a Save Dialog for saving the ZIP archive
         default_zipname = "wireguard_configs.zip"
         save_path = filedialog.asksaveasfilename(
-            title="Speichere alle Wireguard-Konfigurationsdateien als ZIP",
+            title="Save all Wireguard configuration files as ZIP",
             defaultextension=".zip",
             initialfile=default_zipname,
-            filetypes=[("ZIP-Dateien", "*.zip"), ("Alle Dateien", "*.*")]
+            filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")]
         )
         
         if not save_path:
-            return  # Benutzer hat den Dialog abgebrochen
+            return  # User cancelled the dialog
         
         try:
-            # Schreibe den Inhalt des In-Memory-ZIP in die Datei
+            # Write the in-memory ZIP content to the file
             with open(save_path, "wb") as f:
                 f.write(zip_buffer.read())
-            messagebox.showinfo("Download", f"Die ZIP-Datei wurde als '{save_path}' gespeichert.")
+            messagebox.showinfo("Download", f"The ZIP file has been saved as '{save_path}'.")
         except Exception as e:
-            messagebox.showerror("Fehler", f"Die ZIP-Datei konnte nicht erstellt werden: {e}")
+            messagebox.showerror("Error", f"The ZIP file could not be created: {e}")
 
     def add_peer(self):
-        use_template = messagebox.askyesno("Vorlage verwenden?", "Möchten Sie eine Vorlage verwenden?")
+        use_template = messagebox.askyesno("Use template?", "Do you want to use a template?")
         if use_template:
             templates = self.template_manager.get_templates()
             if not templates:
-                messagebox.showinfo("Keine Vorlagen", "Keine Vorlagen vorhanden.")
+                messagebox.showinfo("No Templates", "No templates available.")
                 return
             dialog = TemplateSelectionDialog(self, self.template_manager)
             selected_template = dialog.selected_template
             if selected_template:
                 PeerEditor(self, self.router_connection, peer=templates[selected_template], callback=self.refresh_peers)
             else:
-                messagebox.showwarning("Warnung", "Keine Vorlage ausgewählt.")
+                messagebox.showwarning("Warning", "No template selected.")
         else:
             PeerEditor(self, self.router_connection, callback=self.refresh_peers)
 
     def get_selected_peer(self):
         selection = self.tree.selection()
         if not selection:
-            messagebox.showwarning("Warnung", "Bitte wählen Sie einen Peer aus.")
+            messagebox.showwarning("Warning", "Please select a peer.")
             return None
         peer_id = selection[0]
         return self.peers_data.get(peer_id)
@@ -748,13 +747,13 @@ class WireguardManagerApp(tk.Tk):
     def delete_peer(self):
         peer = self.get_selected_peer()
         if peer:
-            if messagebox.askyesno("Bestätigen", "Peer wirklich löschen?"):
+            if messagebox.askyesno("Confirm", "Really delete peer?"):
                 try:
-                    # Verwenden Sie "id" statt ".id"
+                    # Use "id" instead of ".id"
                     self.router_connection.delete_peer(peer.get("id"))
                     self.refresh_peers()
                 except Exception as e:
-                    messagebox.showerror("Fehler", str(e))
+                    messagebox.showerror("Error", str(e))
 
     def manage_templates(self):
         TemplateManagerUI(self, self.template_manager)
