@@ -60,12 +60,17 @@ class LoginDialog(tk.Toplevel):
     def __init__(self, master, config_manager):
         super().__init__(master)
         self.title("Login zum Router")
+        self.transient(master)
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after(100, lambda: self.attributes("-topmost", False))
         self.config_manager = config_manager
         self.result = None
         self.save_password_var = tk.BooleanVar()
         login_defaults = self.config_manager.get("login", {})
         self.save_password_var.set(login_defaults.get("save_password", False))
         self.create_widgets()
+        self.center()
         self.bind("<Escape>", lambda event: self.destroy())
         self.grab_set()  # Modal
         self.protocol("WM_DELETE_WINDOW", self.on_cancel)
@@ -111,6 +116,26 @@ class LoginDialog(tk.Toplevel):
         ok_button.pack(side="left", padx=5)
         cancel_button = tk.Button(button_frame, text="Abbrechen", command=self.on_cancel)
         cancel_button.pack(side="left", padx=5)
+
+    def center(self):
+        self.update_idletasks()  # Aktualisiert die Fenstermaße
+        master = self.master
+        
+        # Abfrage der Position und Größe des Hauptfensters
+        master_x = master.winfo_rootx()
+        master_y = master.winfo_rooty()
+        master_width = master.winfo_width()
+        master_height = master.winfo_height()
+        
+        # Abfrage der Dimensionen des Login-Fensters
+        dialog_width = self.winfo_width()
+        dialog_height = self.winfo_height()
+        
+        # Berechnung der neuen Position (Zentrierung)
+        x = master_x + (master_width // 2) - (dialog_width // 2)
+        y = master_y + (master_height // 2) - (dialog_height // 2)
+        
+        self.geometry("+{}+{}".format(x, y))
 
     def on_ok(self):
         host = self.entry_host.get().strip()
